@@ -1,16 +1,24 @@
-import { EmbedBuilder, Collection, PermissionsBitField } from 'discord.js'
-import { msg as CoolDown } from '../functions/onCoolDown.mjs'
-import { msg as ErrorHandler } from '../functions/cmdError.mjs'
+import { Collection, PermissionsBitField, Message } from 'discord.js'
+import EmbedBuilder from '../utils/classes/EmbedBuilder.mjs'
+import { msg as CoolDown } from '../utils/Cooldown.mjs'
+import { msg as ErrorHandler } from '../utils/errorHandler.mjs';
+import { memberPermissons } from '../utils/member.mjs'
+import cache from '../utils/cache.mjs'
+import Bot from '../client.mjs'
 
 export default {
     name: "messageCreate",
+    /**
+     * @param {Bot} client - The Discord client.
+     * @param {Message} message - The message object.
+     */
     run: async (client, message) => {
-        let emojis = client.emotes;
         const err = (err, i) => ErrorHandler(!i ? message : i, err);
         // ==============================< Command Handling >=============================\\	
-        const prefix = client.config.Prefix;
-        if (message.author.bot) return;
+        if (message.author.bot || message.system) return;
         if (message.channel.type !== 0) return;
+        const guildData = await message.guild.fetchData();
+        const prefix = guildData?.Prefix || client.config.Prefix;
         const prefixRegex = new RegExp(`^(<@!?${client.user.id}>|${escapeRegex(prefix)})`);
         if (!prefixRegex.test(message.content)) return;
         const [mPrefix] = message.content.match(prefixRegex);
@@ -22,29 +30,29 @@ export default {
             if (mPrefix.includes(client.user.id))
                 return message.reply({
                     // components: [client.linksButtons],
-                    embeds: [new EmbedBuilder()
-                        .setColor(client.embed.color)
-                        .setDescription(`${client.emotes.MESSAGE.y} **To see my commands list type \`${prefix}help\` or \`/help\`**`)
+                    embeds: [new EmbedBuilder(client)
+                        .setColor("Blurple")
+                        .setDescription(`Hy My prefix is ${prefix}`)
                     ],
                 }).catch(() => { });
             return;
         }
         // ==============================< If !command return >=============================\\
         if (!command || !command.run) {
-            return message.reply({
-                embeds: [
-                    new EmbedBuilder()
-                        .setColor(client.embed.wrongcolor)
-                        .setDescription(`${emojis.MESSAGE.i} The command \`${cmd}\` does not exist`)
-                ]
-            }).then(m => setTimeout(() => m.delete(), 6000));
+            // return message.reply({
+            //     embeds: [
+            //         new EmbedBuilder(client)
+            //             .setColor(client.embed.wrongcolor)
+            //             .setDescription(`!{i} The command \`${cmd}\` does not exist`)
+            //     ]
+            // }).then(m => setTimeout(() => m.delete(), 6000));
         }
         if (command) {
             // ==============================< Toggle off >=============================\\
             if (command.toggleOff) {
                 return await message.reply({
-                    embeds: [new EmbedBuilder()
-                        .setDescription(`${emojis.MESSAGE.x} **That Command Has Been Disabled By The Developers! Please Try Later.**`)
+                    embeds: [new EmbedBuilder(client)
+                        .setDescription(`**That Command Has Been Disabled By The Developers! Please Try Later.**`)
                         .setColor(client.embed.wrongcolor)
                     ]
                 }).then(msg => {
@@ -60,17 +68,15 @@ export default {
             // ==============================< On Mainenance Mode >============================= \\
             if (command.maintenance) {
                 return await message.reply({
-                    content: `${emojis.MESSAGE.x} **${command.name} command is on __Maintenance Mode__** try again later!`
+                    content: ` **${command.name} command is on __Maintenance Mode__** try again later!`
                 })
             }
             // ==============================< Owner Only >============================= \\
             if (command.ownerOnly) {
-                const owners = client.config.DEV.OWNER.concat(
-                    client.config.DEV.CO_OWNER
-                );
+                const owners = client.config.Owners
                 if (!owners.includes(message.author.id)) return await message.reply({
-                    embeds: [new EmbedBuilder()
-                        .setDescription(`${emojis.MESSAGE.x} **You cannot use \`${prefix}${command.name}\` command as this is a developer command.**`).setColor(client.embed.wrongcolor)
+                    embeds: [new EmbedBuilder(client)
+                        .setDescription(` **You cannot use \`${prefix}${command.name}\` command as this is a developer command.**`).setColor(client.embed.wrongcolor)
                     ]
                 }).then(msg => {
                     setTimeout(() => {
@@ -83,18 +89,44 @@ export default {
                 });
             }
             // ==============================< Permissions checking >============================= \\
-            if(command.permissions){
+            if (command.permissions) {
                 if (command.permissions.bot || command.permissions.user) {
                     if (!message.member.permissions.has(PermissionsBitField.resolve(command.permissions.user || []))) {
-                        const userPerms = new EmbedBuilder()
-                        .setDescription(`${emojis.MESSAGE.x} ${message.author}, You don't have \`${command.userPerms}\` permissions to use this command!`)
-                        .setColor(client.embed.wrongcolor)
-                    return message.reply({ embeds: [userPerms] })
-                }
-                if (!message.guild.members.cache.get(client.user.id).permissions.has(PermissionsBitField.resolve(command.permissions.bot || []))) {
-                    const botPerms = new EmbedBuilder()
-                        .setDescription(`${emojis.MESSAGE.x} ${message.author}, I don't have \`${command.permissions.bot}\` permissions to use this command!`)
-                        .setColor(client.embed.wrongcolor)
+                        const userPerms = new EmbedBuilder(client)
+                            .setTitle("You dont have permission")
+                            .setDescription(`***${message.author}, The Following permission is required to run this command!***\n\n ${memberPermissons({
+                                member: message.member,
+                                client,
+                                permissions: command.permissions.user
+                            }).join("\n")}`)
+                            .setColor("Blurple")
+                            .setDefaultFooter()
+                            .setTimestamp()
+                        // .setAuthor({
+                        //     name: message.guild.name,
+                        //     iconURL: message.guild.iconURL({
+                        //         dynamic: true
+                        //     })
+                        // })
+                        return message.reply({ embeds: [userPerms] })
+                    }
+                    if (!message.guild.members.cache.get(client.user.id).permissions.has(PermissionsBitField.resolve(command.permissions.bot || []))) {
+                        const botPerms = new EmbedBuilder(client)
+                            .setTitle("I need permission")
+                            .setDescription(`***${message.author}, The Following permission is required for Me!***\n\n ${memberPermissons({
+                                member: message.guild.members.me,
+                                client,
+                                permissions: command.permissions.bot
+                            }).join("\n")}`)
+                            .setColor("Blurple")
+                            .setDefaultFooter()
+                            .setTimestamp()
+                        // .setAuthor({
+                        //     name: message.guild.name,
+                        //     iconURL: message.guild.iconURL({
+                        //         dynamic: true
+                        //     })
+                        // })
                         return message.reply({ embeds: [botPerms] })
                     }
                 }
@@ -103,20 +135,20 @@ export default {
             if (command.music) {
                 const { member, guild } = message, { channel } = member.voice, VC = member.voice.channel;
                 if (!VC) return message.reply({
-                    embeds: [new EmbedBuilder()
+                    embeds: [new EmbedBuilder(client)
                         .setColor(client.embed.wrongcolor)
                         .setDescription(`Please Join a Voice Channel`)
                     ]
                 });
                 if (channel.userLimit != 0 && channel.full)
                     return message.reply({
-                        embeds: [new EmbedBuilder()
+                        embeds: [new EmbedBuilder(client)
                             .setColor(client.embed.wrongcolor)
                             .setDescription(`Your Voice Channel is full, I can't join!`)
                         ]
                     });
                 if (guild.members.me.voice.channel && VC !== guild.members.me.voice.channel) return message.reply({
-                    embeds: [new EmbedBuilder()
+                    embeds: [new EmbedBuilder(client)
                         .setColor(client.embed.wrongcolor)
                         .setDescription(`Join my channel ${guild.members.me.voice.channel}`)
                     ]
@@ -127,27 +159,13 @@ export default {
             if (command.nsfwOnly && !message.channel.nsfw) {
                 return message.reply({
                     embeds: [
-                        new EmbedBuilder()
-                            .setTitle(`${emojis.MESSAGE.x} ${message.author.username} This command only works in NSFW channels!`)
+                        new EmbedBuilder(client)
+                            .setTitle(`${message.author.username} This command only works in NSFW channels!`)
                             .setDescription(`Please go to the NSFW channel to use this command!`)
                             .setColor(client.embed.wrongcolor)
                     ]
 
                 }).then(m => setTimeout(() => m.delete(), 6000));
-            }
-            // ==============================< Only for offical guilds >============================= \\
-            if (command.guildOnly) {
-                const privates = client.config.SERVER.OFFICIAL.Guild_ID_1.concat(client.config.SERVER.Guild_ID_2);
-                if (!privates.includes(message.guild.id)) {
-                    return message.reply({
-                        embeds: [
-                            new EmbedBuilder()
-                                .setTitle(`${emojis.MESSAGE.x} ${message.author.username} You have entered an invalid command!`)
-                                .setDescription(`The command \`${command.name}\` can only be used in the official server.`)
-                                .setColor(client.embed.wrongcolor)
-                        ]
-                    }).then(m => setTimeout(() => m.delete(), 6000));
-                }
             }
 
             // ==============================< Options Manager >============================= \\
@@ -163,27 +181,35 @@ export default {
                     const option = options[index];
                     if (option.required) {
                         if (!args[index] && option.type !== "attachment") {
-                            errorMessages.push(`${emojis.MESSAGE.i} Missing **${th(index + 1)}** Parameter\n\`\`\`yml\n${maped}\n\`\`\``);
+                            errorMessages.push(` Missing **${th(index + 1)}** Parameter\n\`\`\`yml\n${maped}\n\`\`\``);
                             break;
                         } else {
-                            if (option.type === "string") optionsMap.set(option.id, args[index])
-                            else if (option.type === "user") {
-                                const userMatch = args[index].match(/^<@!?(\d+)>$/);
-                                const userMatch2 = args[index].match(/^(\d+)$/);
-                                if (!userMatch && !userMatch2) errorMessages.push(`${emojis.MESSAGE.x} Invalid mention, Kindly mention a correct user or provide a vaild ID!\n\`\`\`yml\n${maped}\n\`\`\``);
-                                else optionsMap.set(option.id, userMatch ? userMatch[1] : userMatch2[1])
+                            if (option.type === "string") {
+                                if (option.choices?.length) {
+                                    const choices = option.choices.map(i => i.toLowerCase());
+
+                                    if (!choices.includes(args[index].toLowerCase())) {
+                                        errorMessages.push(`Kindly Provide a valid input for **${th(index + 1)}** Parameter.\n\`\`\`yml\n${maped}\n\`\`\``);
+                                    } else {
+                                        optionsMap.set(option.id, args[index]);
+                                    }
+
+                                } else optionsMap.set(option.id, args[index])
+
+                            }
+                            else if (option.type === "user" || option.type === "member") {
+                                await ForUser()
                             } else if (option.type === "role") {
-                                if (isValidRole(message.guild, args[index])) optionsMap.set(option.id, args[index].match(/^<@&(\d+)>$/)[1])
-                                else errorMessages.push(`${emojis.MESSAGE.i} Invalid Role, Kindly provide valid role Name, ID or Mention it.\n\`\`\`yml\n${maped}\n\`\`\``);
+                                await ForRole()
                             } else if (option.type === "channel") {
                                 if (isValidChannel(message.guild, args[index])) optionsMap.set(option.id, args[index].match(/^<#(\d+)>$/)[1])
-                                else errorMessages.push(`${emojis.MESSAGE.i} Invalid Channel, Kindly provide valid Channel Name, ID or Mention it.\n\`\`\`yml\n${maped}\n\`\`\``);
+                                else errorMessages.push(` Invalid Channel, Kindly provide valid Channel Name, ID or Mention it.\n\`\`\`yml\n${maped}\n\`\`\``);
                             } else if (option.type === "number") {
-                                if (isNaN(args[index])) errorMessages.push(`${emojis.MESSAGE.i} Invalid Number, Kindly Provide a vaild number.\n\`\`\`yml\n${maped}\n\`\`\``);
+                                if (isNaN(args[index])) errorMessages.push(`Invalid Number, Kindly Provide a vaild number.\n\`\`\`yml\n${maped}\n\`\`\``);
                                 else {
                                     if ((option.max && args[index] > option.max) ||
                                         (option.min && args[index] < option.min)) {
-                                        errorMessages.push(`${emojis.MESSAGE.i} Kindly Provide a Number amoung ${option.min ?? 0}-${option.max ?? `Infinte`} \n\`\`\`yml\n${maped}\n\`\`\``);
+                                        errorMessages.push(`Kindly Provide a Number amoung ${option.min ?? 0}-${option.max ?? `Infinte`} \n\`\`\`yml\n${maped}\n\`\`\``);
                                     } else {
                                         optionsMap.set(option.id, args[index])
                                     }
@@ -192,25 +218,117 @@ export default {
                             } else if (option.type === "attachment") {
                                 if (option.required) {
                                     if (!message.attachments || message.attachments.size === 0) {
-                                        errorMessages.push(`${emojis.MESSAGE.i} Missing **${th(index + 1)}** Parameter\n\`\`\`yml\n${maped}\n\`\`\``);
+                                        errorMessages.push(`Missing **${th(index + 1)}** Parameter\n\`\`\`yml\n${maped}\n\`\`\``);
                                     } else optionsMap.set(option.id, message.attachments)
                                 }
 
                             }
                         }
                     } else {
-                        if (args[index]) {
-                            const userMatch = args[index].match(/^<@!?(\d+)>$/);
-                            const userMatch2 = args[index].match(/^(\d+)$/);
-                            if (!userMatch && !userMatch2) {
-                                errorMessages.push(`${emojis.MESSAGE.x} Invalid mention, Kindly mention a correct user`);
-                            } else optionsMap.set(option.id, userMatch ? userMatch[1] : userMatch2[1])
+
+                        if (option.type === "string") {
+                            if (option.type === "string") {
+                                if (option.choices?.length) {
+                                    const choices = option.choices.map(i => i.toLowerCase());
+
+                                    if (!choices.includes(args[index].toLowerCase())) {
+                                        errorMessages.push(`!{i} Kindly Provide a valid input for **${th(index + 1)}** Parameter.\n\`\`\`yml\n${maped}\n\`\`\``);
+                                    } else {
+                                        optionsMap.set(option.id, args[index]);
+                                    }
+
+                                } else optionsMap.set(option.id, args[index])
+
+                            }
                         }
+
+                        await ForUser()
+                        await forNumber();
+                        await ForRole()
+
                         break;
                     };
+                    async function forNumber() {
+                        if (option.type === "number") {
+                            if (option.required && isNaN(args[index])) errorMessages.push(`!{i} Invalid Number, Kindly Provide a vaild number.\n\`\`\`yml\n${maped}\n\`\`\``);
+                            else {
+                                if ((option.max && args[index] > option.max) ||
+                                    (option.min && args[index] < option.min)) {
+                                    errorMessages.push(`!{i} Kindly Provide a Number amoung ${option.min ?? 0}-${option.max ?? `Infinte`} \n\`\`\`yml\n${maped}\n\`\`\``);
+                                } else {
+                                    optionsMap.set(option.id, args[index])
+                                }
+                            }
+                        }
+                    }
+                    async function ForUser() {
+                        if (args?.[index] && (option.type === "user" || option.type === "member")) {
+                            let userMatch = args[index].match(/^<@!?(\d+)>$/) || args[index].match(/^(\d+)$/);
+                            let user;
+                            let Type = option.type === "user" ? "user-" : `member-${message.guild.id}-`
+                            if (userMatch) {
+                                if (cache.get(Type + userMatch[1])) {
+                                    user = cache.get(Type + userMatch[1]);
+                                    optionsMap.set(option.id, user)
+                                } else {
+                                    if (option.type === "user") {
+                                        let fetchedUser = await client.users.fetch(userMatch[1]).catch(() => null)
+                                        if (!fetchedUser) {
+                                            errorMessages.push(`!{x} Invalid mention, Kindly mention a correct user\n\`\`\`yml\n${maped}\n\`\`\``);
+                                        } else {
+                                            optionsMap.set(option.id, fetchedUser)
+                                            cache.set(Type + fetchedUser.id, fetchedUser, 150)
+                                        }
+                                    } else {
+                                        let fetchedUser = await message.guild.members.fetch(userMatch[1]).catch(() => null)
+                                        if (!fetchedUser) {
+                                            errorMessages.push(`!{x} Invalid mention, Kindly mention a correct user\n\`\`\`yml\n${maped}\n\`\`\``);
+                                        } else {
+                                            optionsMap.set(option.id, fetchedUser)
+                                            cache.set(Type + fetchedUser.id, fetchedUser, 150)
+                                        }
+                                    }
+                                }
+                            } else {
+                                if (option.type === "user") {
+                                    let fetchedUser = await client.users.fetch(args[index]).catch(() => null) || client.users.cache.find(u => u.username === args[index]);
+                                    if (!fetchedUser) {
+                                        errorMessages.push(`!{x} Invalid mention, Kindly mention a correct user\n\`\`\`yml\n${maped}\n\`\`\``);
+                                    } else {
+                                        optionsMap.set(option.id, fetchedUser)
+                                        cache.set(Type + fetchedUser.id, fetchedUser, 150)
+                                    }
+                                } else {
+                                    let fetchedUser = await message.guild.members.fetch(args[index]).catch(() => null) || message.guild.members.cache.find(u => u.user.username === args[index]);
+                                    if (!fetchedUser) {
+                                        errorMessages.push(`!{x} Invalid mention, Kindly mention a correct user\n\`\`\`yml\n${maped}\n\`\`\``);
+                                    } else {
+                                        optionsMap.set(option.id, fetchedUser)
+                                        cache.set(Type + fetchedUser.id, fetchedUser, 150)
+                                    }
+                                }
+                            }
+
+                        }
+                    }
+                    async function ForRole() {
+                        if (option.type === "role") {
+                            const mentionMatch = args[index].match(/^<@&(\d+)>$/);
+                            const key = `Role:${mentionMatch?.[1] || args[index]}`;
+                            const cacheData = cache.get(key)
+                            if (cacheData) optionsMap.set(option.id, cacheData)
+                            else {
+                                const role = message.guild.roles.cache.get(mentionMatch?.[1]) ||
+                                    message.guild.roles.cache.find(r => r.name === args[index]) ||
+                                    message.guild.roles.cache.find(r => r.name.includes(args[index]));
+                                if (role) optionsMap.set(option.id, role);
+                                else errorMessages.push(`!{i} Invalid Role, Kindly provide valid role Name, ID or Mention it.\n\`\`\`yml\n${maped}\n\`\`\``);
+                            }
+                        }
+                    }
                 }
                 if (argsMessages.length > 0) {
-                    const embed = new EmbedBuilder().setFooter({
+                    const embed = new EmbedBuilder(client).setFooter({
                         text: "Required Parameters: < > - Optional Parameters: [ ]"
                     })
                         .setDescription(`***Make Sure to follow the syntax to run  \`${command.name}\` command***\n\`\`\`yml\n${argsMessages[0]}\`\`\``)
@@ -226,7 +344,7 @@ export default {
                     });
                     return;
                 } else if (errorMessages.length > 0) {
-                    const embed = new EmbedBuilder()
+                    const embed = new EmbedBuilder(client)
                         .setAuthor({
                             name: client.user.username,
                             iconURL: client.user.displayAvatarURL({
@@ -249,8 +367,8 @@ export default {
                 if (CoolDown(message, command, client)) {
                     return await message.reply({
                         embeds: [
-                            new EmbedBuilder()
-                                .setDescription(`${emojis.MESSAGE.x} Please wait ***\`${CoolDown(message, command).toFixed(1)}\` Seconds*** Before using the \`${command.name}\` command again!`)
+                            new EmbedBuilder(client)
+                                .setDescription(`!{x} Please wait ***\`${CoolDown(message, command).toFixed(1)}\` Seconds*** Before using the \`${command.name}\` command again!`)
                                 .setColor(client.embed.wrongcolor)
                         ]
                     }).then(m => setTimeout(() => m.delete(), CoolDown(message, command) * 1000));
@@ -258,13 +376,11 @@ export default {
             }
 
             // ==============================< Start The Command >============================= \\
-            await command.run({ client, message, args, command, options: optionsMap, err });
+            await command.run({ client, message, args, command, options: optionsMap, err, guildData });
 
-            const commandLogsChannel = client.channels.cache.get(client.config.Channels.CommandLogs);
-            if (!commandLogsChannel || !client.config.Settings.CommandLogs) return;
-            commandLogsChannel.send({
-                embeds: [new EmbedBuilder()
-                    .setColor(client.embed.color)
+            client.channels.cache.get(client.config.Channels.CommandLogs)?.send({
+                embeds: [new EmbedBuilder(client)
+                    .setColor("Blurple")
                     .setAuthor({
                         name: message.guild.name,
                         iconURL: message.guild.iconURL({
@@ -273,7 +389,7 @@ export default {
                     })
                     .setTitle(`Prefix Command`)
                     .addFields([
-                        { name: "**Author**", value: `\`\`\`yml\n${message.author.tag} [${message.author.id}]\`\`\`` },
+                        { name: "**Author**", value: `\`\`\`yml\n${message.author.username} [${message.author.id}]\`\`\`` },
                         { name: "**Command Name**", value: `\`\`\`yml\n${command.name}\`\`\`` },
                         { name: `**Guild**`, value: `\`\`\`yml\n${message.guild?.name} [${message.guild?.id}]\`\`\`` }
                     ])
@@ -300,20 +416,6 @@ function th(index) {
     else return index + "th"
 }
 
-
-
-function isValidRole(guild, input) {
-    const mentionMatch = input.match(/^<@&(\d+)>$/);
-    if (mentionMatch) {
-        const roleId = mentionMatch[1];
-        return guild.roles.cache.has(roleId);
-    }
-
-    if (guild.roles.cache.has(input)) return true;
-
-    const role = guild.roles.cache.find((r) => r.name === input);
-    return !!role;
-}
 
 
 function isValidChannel(guild, input) {

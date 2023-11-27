@@ -27,3 +27,21 @@ export const resolveStatus = (status) => {
             return status;
     }
 };
+
+
+
+/**
+* @param {GuildMember} member 
+* @param {Bot} client 
+* @param {PermissionsBitField} permissions
+*/
+
+export const memberPermissons = ({ member, client, permissions }) => {
+    const userMarks = [];
+    for (const permission of permissions) {
+        const hasPermission = member.permissions.has(PermissionsBitField.resolve(permission));
+
+        userMarks.push(hasPermission ? `!{y} ${Permissions[permission]}`.replaceEmojis(client) : `!{x} ${Permissions[permission]}`.replaceEmojis(client));
+    }
+    return userMarks;
+}

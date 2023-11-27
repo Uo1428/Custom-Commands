@@ -1,0 +1,17 @@
+{
+  "Guild": {
+    "Type": "String"
+  },
+  "Prefix": {
+    "Type": "String",
+    "Default": "z"
+  },
+  "CustomCommands": {
+    "Type": "Object",
+    "Default": {
+      "Enable": false,
+      "Prefix": "!",
+      "List": []
+    }
+  }
+}

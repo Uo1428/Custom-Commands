@@ -1,0 +1,11 @@
+[
+  {
+    "Guild": "1041589448523128872",
+    "Prefix": "z",
+    "CustomCommands": {
+      "Enable": true,
+      "Prefix": "z",
+      "List": []
+    }
+  }
+]

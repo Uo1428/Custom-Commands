@@ -1,7 +1,8 @@
 import { Client, Collection, GatewayIntentBits as GIB, Partials, Routes, REST, EmbedBuilder } from 'discord.js';
 import fs from 'fs/promises';
 import logger from './utils/logger.mjs';
-import { mongoose } from 'mongoose'
+import { Database } from './utils/index.mjs';
+import './utils/extenders/index.mjs'
 
 class Bot extends Client {
     constructor() {
@@ -51,19 +52,8 @@ class Bot extends Client {
 
         if (!config.CLIENT_ID) this.config.CLIENT_ID = this.application.id;
 
-        if (config.MONGO_DB) {
+        this.db = new Database(this);
 
-            mongoose.set('strictQuery', true);
-            mongoose.connect(config.MONGO_DB, {
-                autoIndex: false,
-                maxPoolSize: 10,
-                serverSelectionTimeoutMS: 5000,
-                socketTimeoutMS: 45000,
-                family: 4,
-            })
-                .then(() => logger("Connected to MongoDB".bold))
-                .catch((err) => console.error("MongoDB ❌\n", err));
-        }
     }
 
     async loadEvents() {
@@ -87,25 +77,28 @@ class Bot extends Client {
         const CLIENT_ID = this.config.CLIENT_ID;
         const rest = new REST({ version: '9' }).setToken(TOKEN);
 
-        let slashCommands = [];
-        const loadSlash = () => new Promise(async (resolve, reject) => {
-            await fs.readdir("./Commands/Slash").then(async i => {
-                i.forEach(async dir => {
-                    await fs.readdir(`./Commands/Slash/${dir}/`).then(async files => {
-                        files.filter(file => file.endsWith('.mjs'));
-                        for (const file of files) {
-                            const { default: slashCommand } = await import("../Commands/Slash/" + dir + "/" + file);
-                            if (slashCommand.ignore) return;
-                            slashCommands.push(slashCommand.data);
-                            if (slashCommand.data.name) this.slashCommands.set(slashCommand.data.name, slashCommand);
-                            else throw `Command Error: ${slashCommand.name || file.split('.mjs')[0] || "Missing Name"} - ${this.user.username}`
-                        }
-                    })
-                })
-            });
+        const loadSlash = async () => await new Promise(async (resolve, reject) => {
+            const slashCommands = []
+            try {
+                const dirs = await fs.readdir("./Commands/Slash");
+
+                for (const dir of dirs) {
+                    const files = await fs.readdir(`./Commands/Slash/${dir}/`);
+
+                    for (const file of files) {
+                        const { default: slashCommandData } = await import(`../Commands/Slash/${dir}/${file}`);
+
+                        slashCommands.push(slashCommandData.data);
+                        this.slashCommands.set(slashCommandData.data.name, slashCommandData);
+                    }
+                }
+
+            } catch (error) {
+                console.error("Error loading slash commands:", error);
+            }
+
             resolve(slashCommands)
         })
-
 
         // ======== Message Commands
 
@@ -115,7 +108,7 @@ class Bot extends Client {
                     files.filter(file => file.endsWith('.mjs'));
                     for (const file of files) {
                         const { default: prefixCommand } = await import("../Commands/Prefix/" + dir + "/" + file);
-                        if (prefixCommand.ignore) return;
+                        if (!prefixCommand || prefixCommand?.ignore) return;
                         if (prefixCommand.name) {
                             let i;
                             if (Array.isArray(prefixCommand.name)) {
@@ -137,16 +130,24 @@ class Bot extends Client {
         });
 
         await loadSlash().then(async (i) => {
+            // await this.application.commands.set(i)
             await rest.put(
                 Routes.applicationCommands(CLIENT_ID), {
                 body: i
-            }).then(() => logger(`Loaded Slash Commands for ${this.user.username}`.bold));
-            this.fatchedCommands = await this.application.commands.fetch();
+            })
+                .then(() => logger(`Loaded Slash Commands for ${this.user.username}`.bold));
             logger(`Loaded Prefix Commands for ${this.user.username}`.bold)
         })
 
     }
-
 }
 
 export default Bot;
+
+
+/**
+* @author uo1428
+* @support uoaio.xyz/discord
+* @Donate patreon.com/uoaio
+* @Note Dont take any type credit 
+*/

@@ -34,4 +34,8 @@ class cache {
     }
 }
 
-export default new cache();
+const c = new cache();
+export default c;
+export {
+    c as cache
+}

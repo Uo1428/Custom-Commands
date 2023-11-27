@@ -1,14 +1,19 @@
-import { EmbedBuilder, Collection, PermissionsBitField } from 'discord.js'
-import { slash as ErrorHandler } from '../functions/cmdError.mjs';
-import {slash as CoolDown} from '../functions/onCoolDown.mjs'
+import { slash as CoolDown } from '../utils/Cooldown.mjs'
+import { slash as ErrorHandler } from '../utils/errorHandler.mjs';
+import { EmbedBuilder } from '../utils/index.mjs';
+import Bot from '../client.mjs';
 
-// import { parsePermissions } from (`${process.cwd()}/src/functions/functions.js`);
 // ================================================================================
 export default {
   name: "interactionCreate",
+  /**
+ * Event handler for the "interactionCreate" event.
+ * @param {Bot} client - The Discord client instance.
+ * @param {import('discord.js').Interaction} interaction - The interaction object.
+ * @returns None
+ */
   run: async (client, interaction) => {
-    const err =  (err, i) =>  ErrorHandler(!i ? interaction : i, err);
-    let emojis = client.emotes
+    const err = (err, i) => ErrorHandler(!i ? interaction : i, err);
     // ==============================< Command Handling >=============================\\
     const slashCommand = client.slashCommands.get(interaction.commandName);
     if (interaction.type == 4) {
@@ -21,13 +26,14 @@ export default {
     // ==============================< If command doesn't found >=============================\\
     if (!slashCommand) return client.slashCommands.delete(interaction.commandName);
     // ==============================< Other Command Handling list >=============================\\
+    const guildData = await interaction.guild.fetchData();
     try {
       // ==============================< Toggle off >=============================\\
       if (slashCommand.toggleOff) {
         return await interaction.reply({
           ephemeral: true,
-          embeds: [new EmbedBuilder()
-            .setTitle(`${emojis.MESSAGE.x} **That Command Has Been Disabled By The Developers! Please Try Later.**`).setColor(client.embed.wrongcolor)
+          embeds: [new EmbedBuilder(client)
+            .setTitle(`!{x} **That Command Has Been Disabled By The Developers! Please Try Later.**`).setColor(client.embed.wrongcolor)
           ]
         }).catch((e) => {
           console.log(e)
@@ -37,16 +43,16 @@ export default {
       if (slashCommand.maintenance) {
         return await interaction.reply({
           ephemeral: true,
-          content: `${emojis.MESSAGE.x} **${slashCommand.name} command is on __Maintenance Mode__** try again later!`
+          content: `!{x} **${slashCommand.name} command is on __Maintenance Mode__** try again later!`
         })
       }
       // ==============================< Owner Only >============================= \\            
       if (slashCommand.ownerOnly) {
-        const owners = client.config.OWNERS;
+        const owners = client.config.Owners;
         if (!owners.includes(interaction.user.id)) return await interaction.reply({
           ephemeral: true,
-          embeds: [new EmbedBuilder()
-            .setDescription(`${emojis.MESSAGE.x} **You cannot use \`${slashCommand.name}\` command as this is a developer command.**`).setColor(client.embed.wrongcolor)
+          embeds: [new EmbedBuilder(client)
+            .setDescription(`!{x} **You cannot use \`${slashCommand.name}\` command as this is a developer command.**`).setColor(client.embed.wrongcolor)
           ]
         }).catch((e) => {
           console.log(String(e).grey)
@@ -57,8 +63,8 @@ export default {
         return interaction.reply({
           ephemeral: true,
           embeds: [
-            new EmbedBuilder()
-              .setDescription(`${emojis.MESSAGE.x} This command can only be used in NSFW channels!`)
+            new EmbedBuilder(client)
+              .setDescription(`!{x} This command can only be used in NSFW channels!`)
               .setColor(client.embed.wrongcolor)
           ]
         })
@@ -69,17 +75,17 @@ export default {
         return interaction.reply({
           ephemeral: true,
           embeds: [
-            new EmbedBuilder()
-              .setDescription(`${emojis.MESSAGE.x} Please wait \`${CoolDown(interaction, slashCommand).toFixed(1)}\` Before using the \`${slashCommand.name}\` command again!`)
+            new EmbedBuilder(client)
+              .setDescription(`!{x} Please wait \`${CoolDown(interaction, slashCommand).toFixed(1)}\` Before using the \`${slashCommand.data.name}\` command again!`)
               .setColor(client.embed.wrongcolor)
-            ]
-          })
-        }
+          ]
+        })
+      }
       // ==============================< Start The Command >============================= \\	       
-      await slashCommand.run({ client, interaction, err });
-      if (client.config.Channels.CommmandLogs && client.config.Settings.CommmandLogs) await client.channels.cache.get(client.config.Channels.CommmandLogs).send({
-        embeds: [new EmbedBuilder()
-          .setColor(client.embed.color)
+      await slashCommand.run({ client, interaction, err, guildData });
+      client.channels.cache.get(client.config.Channels.CommandLogs)?.send({
+        embeds: [new EmbedBuilder(client)
+          .setColor("color")
           .setAuthor({ name: "Slash Command", iconURL: `https://cdn.discordapp.com/emojis/942758826904551464.webp?size=28&quality=lossless` })
           .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
           .addFields([
@@ -91,7 +97,7 @@ export default {
       });
       // ==============================< On Error >============================= \\
     } catch (error) {
-     err(error)
+      err(error)
     }
   }
   // }
