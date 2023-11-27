@@ -10,7 +10,7 @@
 
    ---------
    # 💖 Support
-   - ### [Patreon](https://patreon/uoaio) (**Donate**)
+   - ### [Patreon](https://patreon.com/uoaio) (**Donate**)
    - #### [ΛLL IN ONΞ™ | Development </>](https://uoaio.xyz/discord) (**Discord Server**)
    - #### Leave Star ⭐🌟⭐ 
 
